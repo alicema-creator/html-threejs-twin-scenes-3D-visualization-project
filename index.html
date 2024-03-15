@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html>
+<head includeDefault="true">
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+  <title>3D库孪生场景</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+    }
+
+    #label {
+      position: absolute;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.6);
+      line-height: 1;
+      border-radius: 5px;
+    }
+
+    #video {
+      position: absolute;
+      width: 0;
+      height: 0;
+    }
+  </style>
+  
+</head>
+
+<body>
+  <div id="label"></div>
+  <div id="container"></div>
+  <video id="video" autoplay loop muted>
+      <source src="./video/videoPlane.mp4">
+  </video>
+
+  <script>
+
+    var stats = initStats();
+    var scene, camera, renderer, controls, light, composer,transformControls, options;
+    var matArrayA = []; 
+    var matArrayB = []; 
+    var group = new THREE.Group();
+
+
+    function initScene() {
+      scene = new THREE.Scene();
+    }
+
+
+    function initCamera() {
+      camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 10000);
+      camera.position.set(0, 50, 200);
+    }
+
+  
+
+    function initStats() {
+      var stats = new Stats();
+
+      stats.domElement.style.position = 'absolute';
+      stats.domElement.style.left = '0px';
+      stats.domElement.style.top = '0px';
+
+      document.body.appendChild(stats.domElement);
+      return stats;
+    }
+
+
+
+    function initRenderer() {
+      renderer = new THREE.WebGLRenderer({
+        antialias: true
+      });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setClearColor(0x4682B4, 1.0);
+      document.body.appendChild(renderer.domElement);
+    }
+
+
+    function createFloor() {
+      var loader = new THREE.TextureLoader();
+      loader.load("./ThreeJs/images/floor3.png", function(texture) {
+        texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(10, 10);
+        var floorGeometry = new THREE.BoxGeometry(2600, 1400, 1);
+        var floorMaterial = new THREE.MeshBasicMaterial({
+          map: texture,
+        });
+        var floor = new THREE.Mesh(floorGeometry, floorMaterial);
+        floor.rotation.x = -Math.PI / 2;
+        scene.add(floor);
+      });
+    }
+
+
+    function createCubeWall(width, height, depth, angle, material, x, y, z, name) {
+      var cubeGeometry = new THREE.BoxGeometry(width, height, depth);
+      var cube = new THREE.Mesh(cubeGeometry, material);
+      cube.position.x = x;
+      cube.position.y = y;
+      cube.position.z = z;
+      cube.rotation.y += angle * Math.PI; 
+      cube.name = name;
+      scene.add(cube);
+    }
+
+
+    function createDoor_right(width, height, depth, angle, x, y, z, name) {
+      var loader = new THREE.TextureLoader();
+      loader.load("./ThreeJs/images/door_right.png", function(texture) {
+        var doorgeometry = new THREE.BoxGeometry(width, height, depth);
+        doorgeometry.translate(-50, 0, 0);
+        var doormaterial = new THREE.MeshBasicMaterial({
+          map: texture,
+          color: 0xffffff
+        });
+        doormaterial.opacity = 1.0;
+        doormaterial.transparent = true;
+        var door = new THREE.Mesh(doorgeometry, doormaterial);
+        door.position.set(x, y, z);
+        door.rotation.y += angle * Math.PI; 
+        door.name = name;
+        scene.add(door);
+      });
+    }
+
+
+    
+
+    function createResultBsp(bsp, objects_cube) {
+      var material = new THREE.MeshPhongMaterial({
+        color: 0x9cb2d1,
+        specular: 0x9cb2d1,
+        shininess: 30,
+        transparent: true,
+        opacity: 1
+      });
+      var BSP = new ThreeBSP(bsp);
+      for (var i = 0; i < objects_cube.length; i++) {
+        var less_bsp = new ThreeBSP(objects_cube[i]);
+        BSP = BSP.subtract(less_bsp);
+      }
+      var result = BSP.toMesh(material);
+      result.material.flatshading = THREE.FlatShading;
+      result.geometry.computeVertexNormals();
+      result.geometry.buffersNeedUpdate = true;
+      result.geometry.uvsNeedUpdate = true;
+      scene.add(result);
+    }
+
+
+    function initContent() {
+      createFloor();
+      createWallMaterail();
+      createCubeWall(80, 200, 1500, 0, matArrayB, -1295, 100, 0, "墙面");
+      createCubeWall(80, 200, 1500, 1, matArrayB, 1295, 100, 0, "墙面");
+      createCubeWall(80, 200, 2700, 1.5, matArrayB, 0, 100, -700, "墙面");
+      var wall =          returnWallObject(2600, 200, 80, 0, matArrayB, 0, 100, 700, "墙面");
+      var door_cube1 =    returnWallObject(200, 180, 80, 0, matArrayB, -600, 90, 700, "前门1");
+      var door_cube2 =    returnWallObject(200, 180, 80, 0, matArrayB, 600, 90, 700, "前门2");
+      var window_cube1 =  returnWallObject(100, 100, 80, 0, matArrayB, -900, 90, 700, "窗户1");
+      var window_cube2 =  returnWallObject(100, 100, 80, 0, matArrayB, 900, 90, 700, "窗户2");
+      var window_cube3 =  returnWallObject(100, 100, 80, 0, matArrayB, -200, 90, 700, "窗户3");
+      var window_cube4 =  returnWallObject(100, 100, 80, 0, matArrayB, 200, 90, 700, "窗户4");
+      var objects_cube = [];
+      objects_cube.push(door_cube1);
+      objects_cube.push(door_cube2);
+      objects_cube.push(window_cube1);
+      objects_cube.push(window_cube2);
+      objects_cube.push(window_cube3);
+      objects_cube.push(window_cube4);
+
+    function initControls() {
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.5;
+      controls.maxDistance = 3000;
+      controls.maxPolarAngle = Math.PI / 2.2;
+      controls.target = new THREE.Vector3(50,50,0);
+    }
+
+
+    function init() {
+      initMat();
+      initScene();
+      addSkybox( 10000, scene );
+      initCamera();
+      initRenderer();
+      initContent();
+      initLight();
+      initControls();
+      initGui();
+      initEcharts();
+
+      addArea(0,0,1000,500,scene,"ID1$库区1号","FF0000",20,"左对齐");
+
+      addShelf(scene);
+
+      var shelf_list = GET_SHELF_LIST();
+      for(var i = 1; i <= GET_LAYER_NUM(); i++){
+          for(var j = 1; j <= GET_COLUMN_NUM(); j++){
+              for(var k = 1; k <= shelf_list.length; k++) {
+                  addOneUnitCargos(shelf_list[k-1].shelfId, i, j, scene);
+              }
+          }
+      }
+
+      composer = new THREE.ThreeJs_Composer(renderer, scene, camera, options);
+
+      var objects = [];
+      for (var i = 0; i < scene.children.length; i++) {
+          var Msg =  scene.children[i].name.split("$");
+          if (scene.children[i].isMesh && Msg[0] == "货物") {
+              objects.push(scene.children[i]);
+          }
+      }
+
+      var dragControls = new THREE.DragControls( objects, camera, renderer.domElement );
+      dragControls.addEventListener( 'dragstart', function ( event ) {
+          controls.enabled = false;
+          isPaused = true;
+      } );
+      dragControls.addEventListener( 'dragend', function ( event ) {
+          controls.enabled = true;
+          isPaused = false;
+      } );
+
+      document.addEventListener('resize', onWindowResize, false);
+    }
+
+
+    init();
+    animate();
+  </script>
+</body>
+
+</html>
